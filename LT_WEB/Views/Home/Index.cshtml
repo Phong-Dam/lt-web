@@ -1,0 +1,341 @@
+﻿@{
+    ViewData["Title"] = ViewBag.Resources != null ? ViewBag.Resources["PageTitle"] : "Tìm Kiếm Bài Hát";
+}
+
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card custom-shadow border-0 rounded-4">
+                <div class="card-header bg-primary text-white p-4 rounded-top-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h2 class="mb-0 fw-bold">@(ViewBag.Resources != null ? ViewBag.Resources["SearchTitle"] : "Tìm Kiếm Bài Hát")</h2>
+                        <a href="@Url.Action("Index", "Home", new { lang = ViewBag.NextLanguage ?? "en" })" class="btn btn-outline-light">
+                            <i class="bi bi-translate me-1"></i> @(ViewBag.Resources != null ? ViewBag.Resources["LanguageToggle"] : "English")
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body p-4">
+                    <div class="form-group">
+                        <label for="songSearch" class="form-label fw-bold fs-5">@(ViewBag.Resources != null ? ViewBag.Resources["SearchLabel"] : "Nhập tên bài hát hoặc ca sĩ:")</label>
+                        <div class="input-group mb-3">
+                            <span class="input-group-text"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control form-control-lg" id="songSearch" placeholder="@(ViewBag.Resources != null ? ViewBag.Resources["SearchPlaceholder"] : "Gõ để tìm kiếm...")" autocomplete="off">
+                        </div>
+                        <div id="songInfo" class="mt-4 d-none">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h4 class="mb-0">@(ViewBag.Resources != null ? ViewBag.Resources["SongInfoTitle"] : "Thông tin bài hát")</h4>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-12">
+                                    <div class="card border-0 custom-shadow mb-3 rounded-3">
+                                        <div class="card-body">
+                                            <h5 id="songTitle" class="card-title fw-bold"></h5>
+                                            <h6 id="songArtist" class="card-subtitle mb-2 text-muted"></h6>
+                                            <div id="songViews" class="text-muted small mt-2"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-12">
+                                    <div class="ratio ratio-16x9 mb-3 custom-shadow rounded-3">
+                                        <iframe id="youtubePlayer" src="" title="YouTube video player" frameborder="0" 
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                allowfullscreen></iframe>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css">
+    <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+    <style>
+        /* Custom styling for autocomplete dropdown */
+        .ui-autocomplete {
+            max-height: 400px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border: none !important;
+            padding: 8px;
+            width: auto !important;
+            min-width: 300px;
+        }
+        
+        .ui-autocomplete .ui-menu-item-wrapper {
+            padding: 10px;
+            border-radius: 6px;
+            border: none !important;
+        }
+        
+        .ui-autocomplete .ui-menu-item-wrapper.ui-state-active {
+            background-color: #f0f7ff !important;
+            border: none !important;
+            margin: 0 !important;
+            color: #0d6efd !important;
+        }
+        
+        .ui-menu-item {
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            margin-bottom: 4px;
+        }
+        
+        .ui-menu-item:last-child {
+            border-bottom: none;
+        }
+        
+        .song-result {
+            padding: 5px 0;
+        }
+        
+        .song-title {
+            font-weight: 600;
+            display: block;
+        }
+        
+        .song-artist {
+            font-size: 0.85rem;
+            color: #666;
+            display: block;
+        }
+        
+        .song-views {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            background-color: #f0f0f0;
+            font-size: 0.8rem;
+            color: #666;
+            margin-left: 8px;
+            float: right;
+        }
+        
+        /* Hiệu ứng cho input */
+        .form-control:focus {
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+            border-color: #86b7fe;
+        }
+        
+        .ui-helper-hidden-accessible {
+            display: none;
+        }
+    </style>
+    <script>
+        $(document).ready(function() {
+            console.log("Document ready, initializing autocomplete...");
+            
+            // Text resources for localization with fallbacks
+            const viewsText = "@(ViewBag.Resources != null ? ViewBag.Resources["ViewsText"] : "lượt xem")";
+            const loadingText = "@(ViewBag.Resources != null ? ViewBag.Resources["LoadingText"] : "Đang tìm...")";
+            const noResultsText = "@(ViewBag.Resources != null ? ViewBag.Resources["NoResults"] : "Không tìm thấy bài hát phù hợp")";
+            const searchErrorText = "@(ViewBag.Resources != null ? ViewBag.Resources["SearchError"] : "Đã xảy ra lỗi khi tìm kiếm")";
+            
+            /**
+             * AUTOCOMPLETE IMPLEMENTATION - CHI TIẾT CÁCH HOẠT ĐỘNG
+             * 
+             * Ứng dụng này sử dụng jQuery UI Autocomplete để hiển thị gợi ý khi người dùng tìm kiếm.
+             * Dưới đây là cách nó hoạt động:
+             * 
+             * 1. Khởi tạo: Autocomplete được khởi tạo trên input có id "songSearch"
+             * 2. Cấu hình: 
+             *    - minLength: Số ký tự tối thiểu cần gõ trước khi bắt đầu tìm kiếm (1 ký tự)
+             *    - delay: Thời gian chờ giữa các lần gõ (100ms) để tránh quá nhiều request
+             * 3. Nguồn dữ liệu (source):
+             *    - Dùng Ajax để gọi API SearchSongs từ HomeController 
+             *    - Gửi term là giá trị đang gõ trong ô tìm kiếm
+             *    - Nhận kết quả JSON và chuyển đổi thành dạng có thể hiển thị
+             * 4. Xử lý sự kiện:
+             *    - focus: Ngăn việc tự động điền vào ô input khi hover qua gợi ý
+             *    - select: Xử lý khi người dùng chọn một mục trong danh sách gợi ý
+             * 5. Tùy chỉnh hiển thị:
+             *    - _renderItem: Custom cách hiển thị từng mục trong danh sách
+             *    - Định dạng khác nhau cho mục bình thường, thông báo lỗi, và không có kết quả
+             */
+            
+            /**
+             * Định dạng số lượt xem để dễ đọc
+             * Ví dụ: 1500 -> 1.5K, 1500000 -> 1.5M
+             * @@param {number} views - Số lượt xem cần định dạng
+             * @@returns {string} Số lượt xem đã được định dạng
+             */
+            function formatViews(views) {
+                if (views >= 1000000) {
+                    return (views / 1000000).toFixed(1) + 'M';
+                } else if (views >= 1000) {
+                    return (views / 1000).toFixed(1) + 'K';
+                } else {
+                    return views;
+                }
+            }
+            
+            /**
+             * Trích xuất ID YouTube từ URL của video
+             * Hỗ trợ nhiều định dạng URL YouTube khác nhau
+             * @@param {string} url - URL của video YouTube
+             * @@returns {string|null} ID của video hoặc null nếu không tìm thấy
+             */
+            function getYoutubeId(url) {
+                const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+                const match = url.match(regExp);
+                return (match && match[2].length === 11) ? match[2] : null;
+            }
+            
+            /**
+             * Hiển thị thông tin chi tiết của bài hát đã chọn
+             * Bao gồm: hiển thị tiêu đề, ca sĩ, lượt xem và nhúng video YouTube
+             * 
+             * @@param {number} songId - ID của bài hát
+             * @@param {string} songTitle - Tiêu đề bài hát
+             * @@param {string} songArtist - Tên ca sĩ
+             * @@param {string} songLink - Link YouTube của bài hát
+             * @@param {number} songViews - Số lượt xem
+             */
+            function displaySongInfo(songId, songTitle, songArtist, songLink, songViews) {
+                // Lấy YouTube ID từ link
+                const youtubeId = getYoutubeId(songLink);
+                
+                // Cập nhật thông tin bài hát trong giao diện
+                $("#songTitle").text(songTitle);
+                $("#songArtist").text(songArtist);
+                $("#songViews").html(`<i class="bi bi-eye-fill me-1"></i> ${formatViews(songViews)} ${viewsText}`);
+                
+                // Nhúng video YouTube với autoplay=1 để tự động phát
+                if (youtubeId) {
+                    const embedUrl = `https://www.youtube.com/embed/${youtubeId}?autoplay=1`;
+                    $("#youtubePlayer").attr("src", embedUrl);
+                }
+                
+                // Hiển thị phần thông tin bài hát (mặc định là ẩn)
+                $("#songInfo").removeClass("d-none");
+                
+                // Cuộn trang đến phần video để người dùng có thể xem ngay
+                $('html, body').animate({
+                    scrollTop: $("#songInfo").offset().top - 20
+                }, 500);
+            }
+            
+            // Khởi tạo autocomplete trên phần tử input #songSearch
+            $("#songSearch").autocomplete({
+                // Số ký tự tối thiểu cần gõ để kích hoạt autocomplete
+                minLength: 1,
+                
+                // Thời gian chờ giữa các lần gõ (milliseconds)
+                // Giảm xuống 100ms để cảm giác phản hồi nhanh hơn
+                delay: 100,
+                
+                /**
+                 * Source: Chức năng để lấy dữ liệu cho autocomplete
+                 * 
+                 * @@param {Object} request - Chứa thông tin yêu cầu, trong đó request.term là giá trị đang gõ
+                 * @@param {Function} response - Callback để trả về kết quả cho autocomplete
+                 */
+                source: function(request, response) {
+                    // Gọi API SearchSongs để lấy kết quả tìm kiếm
+                    $.ajax({
+                        url: "@Url.Action("SearchSongs", "Home")",
+                        dataType: "json",
+                        data: { term: request.term },
+                        success: function(data) {
+                            // Nếu có kết quả, trả về danh sách các bài hát
+                            if (data && data.length > 0) {
+                                response(data);
+                            } else {
+                                // Nếu không có kết quả, hiển thị thông báo
+                                response([{
+                                    id: 0,
+                                    value: noResultsText,
+                                    noResults: true // Đánh dấu đây là mục "không có kết quả"
+                                }]);
+                            }
+                        },
+                        error: function(xhr, status, error) {
+                            console.error("Error in search:", error);
+                            // Nếu có lỗi, hiển thị thông báo lỗi
+                            response([{
+                                id: 0,
+                                value: searchErrorText,
+                                isError: true // Đánh dấu đây là mục "lỗi"
+                            }]);
+                        }
+                    });
+                },
+                
+                /**
+                 * Focus: Xử lý sự kiện khi người dùng di chuột qua một mục gợi ý
+                 * 
+                 * @@param {Event} event - Đối tượng sự kiện JavaScript
+                 * @@param {Object} ui - Chứa thông tin về mục đang được focus
+                 * @@returns {boolean} false - Ngăn không cho jQuery UI tự động điền giá trị vào input
+                 */
+                focus: function(event, ui) {
+                    // Trả về false để ngăn không cho tự động điền giá trị vào input
+                    // khi người dùng di chuột qua các mục gợi ý
+                    return false;
+                },
+                
+                /**
+                 * Select: Xử lý sự kiện khi người dùng chọn một mục từ danh sách gợi ý
+                 * 
+                 * @@param {Event} event - Đối tượng sự kiện JavaScript
+                 * @@param {Object} ui - Chứa thông tin về mục được chọn (ui.item)
+                 * @@returns {boolean} false - Ngăn không cho jQuery UI tự động xử lý sự kiện
+                 */
+                select: function(event, ui) {
+                    // Không làm gì nếu là mục "không có kết quả" hoặc "lỗi"
+                    if (ui.item.noResults || ui.item.isError) {
+                        return false;
+                    }
+                    
+                    // Cập nhật giá trị trong ô tìm kiếm thành tiêu đề bài hát đã chọn
+                    $("#songSearch").val(ui.item.value);
+                    
+                    // Hiển thị thông tin chi tiết về bài hát
+                    displaySongInfo(ui.item.id, ui.item.value, ui.item.artist, ui.item.link, ui.item.views);
+                    
+                    // Trả về false để ngăn không cho jQuery UI tự động xử lý sự kiện
+                    return false;
+                }
+                
+            /**
+             * _renderItem: Tùy chỉnh cách hiển thị từng mục trong danh sách gợi ý
+             * 
+             * Đây là phương thức của autocomplete widget, được ghi đè để tùy chỉnh giao diện
+             * 
+             * @@param {Object} ul - Phần tử DOM là danh sách (list) chứa tất cả các mục gợi ý
+             * @@param {Object} item - Dữ liệu của mục cần hiển thị
+             * @@returns {Object} - Phần tử jQuery chứa mục đã được tùy chỉnh
+             */
+            }).autocomplete("instance")._renderItem = function(ul, item) {
+                // Hiển thị khác biệt cho trường hợp không có kết quả hoặc lỗi
+                if (item.noResults || item.isError) {
+                    return $("<li>")
+                        .append(`<div class="py-2 px-2 text-center ${item.isError ? "text-danger" : "text-muted"}">${item.value}</div>`)
+                        .appendTo(ul);
+                }
+                
+                // Hiển thị thông tin bài hát với định dạng đẹp
+                // - song-title: Tiêu đề bài hát với định dạng đậm
+                // - song-views: Lượt xem với biểu tượng mắt, đặt ở bên phải
+                // - song-artist: Tên ca sĩ với font nhỏ hơn và màu nhạt hơn
+                return $("<li>")
+                    .append(`<div class="song-result">
+                              <span class="song-title">${item.value}</span>
+                              <span class="song-views"><i class="bi bi-eye-fill me-1"></i>${formatViews(item.views)}</span>
+                              <span class="song-artist">${item.artist}</span>
+                             </div>`)
+                    .appendTo(ul);
+            };
+            
+            // Focus vào ô tìm kiếm khi trang vừa tải
+            $("#songSearch").focus();
+        });
+    </script>
+}
